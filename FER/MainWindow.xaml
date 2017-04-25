@@ -1,0 +1,71 @@
+﻿<Window x:Class="FER.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:FER"
+        mc:Ignorable="d"
+        Title="MainWindow" WindowStartupLocation="CenterScreen" Closed="WindowClosed" Left="0" Top="0" Width="1420">
+    <Grid x:Name="mainGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="640"/>
+            <ColumnDefinition Width="640"/>
+            <ColumnDefinition Width="120"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="600*"/>
+            <RowDefinition Height="70*"/>
+        </Grid.RowDefinitions>
+        <StackPanel x:Name="colorPanel" Grid.Row="0" Grid.RowSpan="1" Grid.ColumnSpan="1" Grid.Column="0">
+            <Canvas x:Name="imgColorCanvas" Panel.ZIndex="999"/>
+            <Image x:Name="imgColorStream" Panel.ZIndex="1"/>
+        </StackPanel>
+        <StackPanel x:Name="depthPanel" Grid.Row="0" Grid.RowSpan="1" Grid.ColumnSpan="1" Grid.Column="1">
+            <Image x:Name="imgDepthStream"/>
+        </StackPanel>
+        <StackPanel x:Name="menuPanel" Grid.Row="0" Grid.RowSpan="1" Grid.ColumnSpan="1" Grid.Column="2" Width="100">
+            <Button x:Name="saveImage" Content="Save Image" HorizontalAlignment="Left" VerticalAlignment="Top" Click="SaveImage" Width="100"/>
+            <Button x:Name="saveSeries" Content="Save Series" HorizontalAlignment="Left" VerticalAlignment="Top" Width="100" Click="SaveSeries"/>
+            <Button x:Name="cancelSave" Content="Cancel" HorizontalAlignment="Left" VerticalAlignment="Top" Width="100" Click="CancelSave"/>
+            <StackPanel Orientation="Horizontal">
+                <Label>Frames (skip): </Label>
+                <Label x:Name="saveSeriesDelayLabel">0</Label>
+            </StackPanel>
+            <Slider x:Name="saveSeriesDelaySlider" Minimum="0" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="SaveSeriesDelaySliderValueChanged"/>
+            <Label>Stream Type</Label>
+            <ComboBox x:Name="streamBox" HorizontalAlignment="Left" VerticalAlignment="Top" Width="100" SelectedItem="Color" SelectionChanged="StreamBoxSelectionChanged">
+                <ComboBoxItem Content="Color" HorizontalAlignment="Left"/>
+                <ComboBoxItem Content="Depth" HorizontalAlignment="Left"/>
+            </ComboBox>
+            <Label>Pixel Format</Label>
+            <ComboBox x:Name="pixelFormatBox" HorizontalAlignment="Left" VerticalAlignment="Top" Width="100" SelectionChanged="PixelFormatBoxSelectionChanged"/>
+            <Label>Landmark Group</Label>
+            <ComboBox x:Name="landmarkGroupBox" HorizontalAlignment="Left" VerticalAlignment="Top" Width="100" SelectedIndex="0" SelectionChanged="LandmarkGroupBoxSelectionChanged">
+                <ComboBoxItem Content="All" HorizontalAlignment="Left"/>
+                <ComboBoxItem Content="Yaw" HorizontalAlignment="Left"/>
+                <ComboBoxItem Content="Mouth" HorizontalAlignment="Left"/>
+            </ComboBox>
+            <StackPanel Orientation="Horizontal">
+                <Label>L-Offset:</Label>
+                <Label x:Name="landmarkOffsetLabel">0</Label>
+            </StackPanel>
+            <Slider x:Name="landmarkOffsetSlider" Minimum="0" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="LandmarkOffsetSliderValueChanged"/>
+            <StackPanel Orientation="Horizontal">
+                <Label>Landmarks:</Label>
+                <CheckBox x:Name="drawLandmarks" VerticalAlignment="Center" IsChecked="False" Checked="DrawLandmarksChecked" Unchecked="DrawLandmarksUnhecked"></CheckBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Label>Face Box:</Label>
+                <CheckBox x:Name="faceBoundingBox" VerticalAlignment="Center" IsChecked="False" Unchecked="DrawFaceBoundingBoxesUnchecked" Checked="DrawFaceBoundingBoxesChecked"></CheckBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Label>L-mark Box:</Label>
+                <CheckBox x:Name="landmarkBoundingBox" VerticalAlignment="Center" IsChecked="False" Checked="DrawLandmarkBoundingBoxesChecked" Unchecked="DrawLandmarkBoundingBoxesUnchecked"></CheckBox>
+            </StackPanel>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Grid.RowSpan="1" Grid.ColumnSpan="2">
+            <Label x:Name="lblMessage" Content="(Wave Your Hand)" HorizontalAlignment="Center" VerticalAlignment="Bottom" FontSize="24" Grid.Row="1" Height="42"/>
+        </StackPanel>
+
+    </Grid>
+</Window>
