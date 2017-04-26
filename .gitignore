@@ -2,3 +2,4 @@
 *.jpeg
 obj
 .vs
+*.tmp_proj
