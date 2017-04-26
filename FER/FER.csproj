@@ -92,23 +92,29 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Intel.RealSense.cs">
-      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\win32\Intel.RealSense.cs.dll</HintPath>
+    <Reference Include="Intel.RealSense.cs, Version=11.0.27.1384, Culture=neutral, PublicKeyToken=ca106b2214526f83, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\x64\Intel.RealSense.cs.dll</HintPath>
     </Reference>
-    <Reference Include="Intel.RealSense.Face.cs">
-      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\win32\Intel.RealSense.Face.cs.dll</HintPath>
+    <Reference Include="Intel.RealSense.Face.cs, Version=11.0.28.2787, Culture=neutral, PublicKeyToken=625f28b329b62653, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\x64\Intel.RealSense.Face.cs.dll</HintPath>
     </Reference>
-    <Reference Include="Intel.RealSense.hand.cs">
-      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\win32\Intel.RealSense.hand.cs.dll</HintPath>
+    <Reference Include="Intel.RealSense.hand.cs, Version=11.0.27.1404, Culture=neutral, PublicKeyToken=625f28b329b62653, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\x64\Intel.RealSense.hand.cs.dll</HintPath>
     </Reference>
-    <Reference Include="Intel.RealSense.handcursor.cs">
-      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\win32\Intel.RealSense.handcursor.cs.dll</HintPath>
+    <Reference Include="Intel.RealSense.HandCursor.cs, Version=11.0.27.1404, Culture=neutral, PublicKeyToken=625f28b329b62653, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\x64\Intel.RealSense.HandCursor.cs.dll</HintPath>
     </Reference>
-    <Reference Include="Intel.RealSense.Scan.cs">
-      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\win32\Intel.RealSense.Scan.cs.dll</HintPath>
+    <Reference Include="Intel.RealSense.Scan.cs, Version=11.0.27.8892, Culture=neutral, PublicKeyToken=625f28b329b62653, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\x64\Intel.RealSense.Scan.cs.dll</HintPath>
     </Reference>
-    <Reference Include="Intel.RealSense.Segmentation.cs">
-      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\win32\Intel.RealSense.Segmentation.cs.dll</HintPath>
+    <Reference Include="Intel.RealSense.Segmentation.cs, Version=11.0.27.2322, Culture=neutral, PublicKeyToken=625f28b329b62653, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Intel\RSSDK\bin\x64\Intel.RealSense.Segmentation.cs.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
