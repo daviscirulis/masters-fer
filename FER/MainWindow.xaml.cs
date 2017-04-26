@@ -187,8 +187,6 @@ namespace FER
                     break;
                 }
 
-
-
                 //process gesture
                 ProcessGesture();
 
@@ -202,11 +200,8 @@ namespace FER
                 //Release the frame
                 senseManager.ReleaseFrame();
 
-
             }
-            cursor.Dispose();
-            cursorConfig.Dispose();
-            projection.Dispose();
+
             senseManager.Close();
             session.Dispose();
         }
@@ -246,6 +241,10 @@ namespace FER
                     }
                 }
             }
+
+            faceData.Dispose();
+            faceModule.Dispose();
+
         }
 
         private void ProcessGesture()
@@ -260,6 +259,8 @@ namespace FER
 
             //release curor data
             if (cursorData != null) cursorData.Dispose();
+            cursor.Dispose();
+            cursorConfig.Dispose();
         }
 
         private void ProcessImages()
@@ -270,56 +271,53 @@ namespace FER
 
             ImageData colorData;
             ImageData depthData;
-            Bitmap depthBitmap;
 
             color.AcquireAccess(ImageAccess.ACCESS_READ, colorPixelFormat, out colorData);
             depth.AcquireAccess(ImageAccess.ACCESS_READ, depthPixelFormat, out depthData);
-
-            // WriteableBitmap cBitmap = colorData.ToWritableBitmap(color.Info.width, color.Info.height, DPI_X, DPI_Y);
-            // WriteableBitmap dBitmap = depthData.ToWritableBitmap(depth.Info.width, depth.Info.height, DPI_X, DPI_Y);
-
-            //save image
-            if (captureImage)
-            {
-                this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
-                {
-
-                    depthBitmap = GetDepthF32Bitmap(depth, color);
-                    SaveSingleRgbdToDisk(colorData, color.Info, depthBitmap);
-                    depthBitmap.Dispose();
-                }));
-            }
-
-            if (captureSeries)
-            {
-                this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
-                {
-                    if (skippedFrames < saveSeriesDelay)
-                    {
-                        skippedFrames++;
-                    }
-                    else
-                    {
-                        depthBitmap = GetDepthF32Bitmap(depth, color);
-                        SaveSeriesRgbdToDisk(dirName, colorData, color.Info, depthBitmap);
-                        depthBitmap.Dispose();
-                        skippedFrames = 0;
-                    }
-                }));
-            }
-
-
 
             // Update the user interface
             UpdateUI(colorData, color.Info, ImageType.COLOR);
             UpdateUI(depthData, depth.Info, ImageType.DEPTH);
 
-            //release access
-            color.ReleaseAccess(colorData);
-            depth.ReleaseAccess(depthData);
+            if (captureImage || (captureSeries && skippedFrames >= saveSeriesDelay))
+            {
+                int cwidth = color.Info.width;
+                int cheight = color.Info.height;
+                int dwidth = depth.Info.width;
+                int dheight = depth.Info.height;
+                float[] depthPixels = ImageToFloatArray(depth);
+                PointF32[] invuvmap = GetInvUVMap(color, depth);
+                Point3DF32[] mappedPixels = GetMappedPixels(cwidth, cheight, dwidth, dheight, invuvmap, depthPixels);
+                Bitmap depthBitmap = depthBitmap = GetDepthF32Bitmap(depth.Info.width, depth.Info.height, mappedPixels);
+                Bitmap colorBitmap = colorBitmap = colorData.ToBitmap(0, cwidth, cheight);
 
-            color.Dispose();
-            depth.Dispose();
+                //release access
+                color.ReleaseAccess(colorData);
+                depth.ReleaseAccess(depthData);
+                color.Dispose();
+                depth.Dispose();
+
+                //save image
+                if (captureImage)
+                {
+                    SaveSingleRgbdToDisk(colorBitmap, depthBitmap);
+                }
+                else if (captureSeries)
+                {
+                    SaveSeriesRgbdToDisk(dirName, colorBitmap, depthBitmap);
+                    skippedFrames = 0;
+                }
+
+                depthBitmap.Dispose();
+                colorBitmap.Dispose();
+            }
+
+            if (captureSeries && skippedFrames < saveSeriesDelay)
+            {
+                skippedFrames++;
+            }
+
+            projection.Dispose();
 
         }
 
@@ -379,10 +377,11 @@ namespace FER
 
         private System.Windows.Media.PixelFormat GetPixelFormat(ImageType type)
         {
-            if(type.Equals(ImageType.COLOR))
+            if (type.Equals(ImageType.COLOR))
             {
                 return ConvertPixelFormat(colorPixelFormat);
-            } else
+            }
+            else
             {
                 return ConvertPixelFormat(depthPixelFormat);
             }
@@ -583,7 +582,7 @@ namespace FER
             }
         }
 
-        private void SaveImagesToDisk(ImageData imageData, ImageInfo imageInfo, String directoryName, int imageId, String imgPrefix, ImageType type)
+        private void SaveImagesToDisk(Bitmap bitmap, String directoryName, int imageId, String imgPrefix, ImageType type)
         {
             Int32 unixTimestamp;
             RectI32 bRect;
@@ -592,7 +591,6 @@ namespace FER
             JpegBitmapEncoder encoder;
             FileStream stream;
 
-            Bitmap bitmap = imageData.ToBitmap(0, imageInfo.width, imageInfo.height);
             BitmapSource source = Convert(bitmap, GetPixelFormat(type));
 
             dirName = CheckDirectoryName(directoryName);
@@ -602,7 +600,7 @@ namespace FER
                 bRect = landmarkBoundingBoxes.ElementAt(i);
                 cropped = new CroppedBitmap(source, new Int32Rect(bRect.x, bRect.y, bRect.w, bRect.h));
 
-                using (stream = new FileStream(dirName + imgPrefix + unixTimestamp + "_" +  imageId + ".jpeg", FileMode.Create))
+                using (stream = new FileStream(dirName + imgPrefix + unixTimestamp + "_" + imageId + ".jpeg", FileMode.Create))
                 {
                     encoder = new JpegBitmapEncoder();
                     encoder.Frames.Add(BitmapFrame.Create(cropped));
@@ -641,7 +639,7 @@ namespace FER
                 bRect = landmarkBoundingBoxes.ElementAt(i);
                 cropped = new CroppedBitmap(source, new Int32Rect(bRect.x, bRect.y, bRect.w, bRect.h));
 
-                using (stream = new FileStream(dirName + imgPrefix + unixTimestamp + "_" +  imageId + ".jpeg", FileMode.Create))
+                using (stream = new FileStream(dirName + imgPrefix + unixTimestamp + "_" + imageId + ".jpeg", FileMode.Create))
                 {
                     encoder = new JpegBitmapEncoder();
                     encoder.Frames.Add(BitmapFrame.Create(cropped));
@@ -768,7 +766,7 @@ namespace FER
             saveSeriesDelayLabel.Content = saveSeriesDelay.ToString();
         }
 
-        private Bitmap GetDepthF32Bitmap(Intel.RealSense.Image depth, Intel.RealSense.Image color)
+        private float[] ImageToFloatArray(Intel.RealSense.Image depth)
         {
             ImageData ddata;
             depth.AcquireAccess(ImageAccess.ACCESS_READ, Intel.RealSense.PixelFormat.PIXEL_FORMAT_DEPTH_F32, out ddata);
@@ -777,45 +775,47 @@ namespace FER
             var dPixels = ddata.ToFloatArray(0, dwidth * dheight);
             depth.ReleaseAccess(ddata);
 
+            return dPixels;
+        }
+
+        private PointF32[] GetInvUVMap(Intel.RealSense.Image color, Intel.RealSense.Image depth)
+        {
             var invuvmap = new PointF32[color.Info.width * color.Info.height];
             projection.QueryInvUVMap(depth, invuvmap);
-            var mappedPixels = new float[color.Info.width * color.Info.height];
-            Bitmap bmp = new Bitmap(dwidth, dheight, System.Drawing.Imaging.PixelFormat.Format48bppRgb);
-            float minValue = float.MaxValue;
-            float maxValue = 0;
-            float upperLimit = 1.0f;
-            float lowerLimit = 0.1f;
-            float A = lowerLimit - upperLimit;
+            return invuvmap;
+        }
+
+        private Point3DF32[] GetMappedPixels(int cwidth, int cheight, int dwidth, int dheight, PointF32[] invuvmap, float[] depthPixels)
+        {
+            var mappedPixels = new Point3DF32[cwidth * cheight];
+
             for (int i = 0; i < invuvmap.Length; i++)
             {
                 int u = (int)(invuvmap[i].x * dwidth);
                 int v = (int)(invuvmap[i].y * dheight);
-                if (u >= 0 && v >= 0 && u + v * dwidth < dPixels.Length)
+                if (u >= 0 && v >= 0 && u + v * dwidth < depthPixels.Length)
                 {
-                    mappedPixels[i] = dPixels[u + v * dwidth];
-                    if (mappedPixels[i] > maxValue)
-                    {
-                        maxValue = mappedPixels[i];
-                    }
-
-                    if (mappedPixels[i] > 0 && mappedPixels[i] < minValue)
-                    {
-                        minValue = mappedPixels[i];
-                    }
-
+                    mappedPixels[i] = new Point3DF32(u, v, depthPixels[u + v * dwidth]);
                 }
             }
-            float D = maxValue - minValue;
+            return mappedPixels;
+        }
 
-            for (int i = 0; i < invuvmap.Length; i++)
+        private Bitmap GetDepthF32Bitmap(int dwidth, int dheight, Point3DF32[] mappedPixels)
+        {
+
+            Bitmap bmp = new Bitmap(dwidth, dheight, System.Drawing.Imaging.PixelFormat.Format48bppRgb);
+            float maxValue = mappedPixels.Select(point => point.z).Max();
+            float minValue = mappedPixels.Select(point => point.z).Where(z => z > 0).Min();
+            float a = 1.0f;
+            float b = 0.1f;
+            for (int i = 0; i < mappedPixels.GetLength(0); i++)
             {
-                int u = (int)(invuvmap[i].x * dwidth);
-                int v = (int)(invuvmap[i].y * dheight);
-                if (u >= 0 && v >= 0 && u + v * dwidth < dPixels.Length && mappedPixels[i] > 0)
+                if (mappedPixels[i].z > 0f)
                 {
-                    float lum = (A * ((mappedPixels[i] - minValue) / D) + upperLimit) * 255.0f;
+                    float lum = ((b - a) * ((mappedPixels[i].z - minValue) / (maxValue - minValue)) + a) * 255.0f;
                     System.Drawing.Color newColor = System.Drawing.Color.FromArgb((int)lum, (int)lum, (int)lum);
-                    bmp.SetPixel(u, v, newColor);
+                    bmp.SetPixel((int)mappedPixels[i].x, (int)mappedPixels[i].y, newColor);
                 }
             }
 
@@ -836,10 +836,10 @@ namespace FER
             return bmp;
         }
 
-        private void SaveSingleRgbdToDisk(ImageData colorData, ImageInfo colorInfo, Bitmap depthBitmap)
+        private void SaveSingleRgbdToDisk(Bitmap colorBitmap, Bitmap depthBitmap)
         {
             SaveImagesToDisk2(depthBitmap, "./", 1, "depth_");
-            SaveImagesToDisk(colorData, colorInfo, "", 1, "color_",ImageType.COLOR);
+            SaveImagesToDisk(colorBitmap, "", 1, "color_", ImageType.COLOR);
             //SaveImagesToDisk(depthData, depthInfo, "", 1, "depth_", ImageType.DEPTH);
             //SaveImagesToDisk(depthData, depth.Info, depthPixelFormat, "", 1, "depth_");
             captureImage = false;
@@ -853,11 +853,11 @@ namespace FER
             }));
         }
 
-        private void SaveSeriesRgbdToDisk(String dirName, ImageData colorData, ImageInfo colorInfo, Bitmap depthBitmap)
+        private void SaveSeriesRgbdToDisk(String dirName, Bitmap colorBitmap, Bitmap depthBitmap)
         {
             ++seriesCaptured;
             UpdateMessageLabel("Remaining Frames: " + (seriesToCapture - seriesCaptured));
-            SaveImagesToDisk(colorData, colorInfo, dirName, seriesCaptured, "color_",ImageType.COLOR);
+            SaveImagesToDisk(colorBitmap, dirName, seriesCaptured, "color_", ImageType.COLOR);
             //SaveImagesToDisk(depthData, depthInfo, dirName, seriesCaptured, "depth_", ImageType.DEPTH);
             SaveImagesToDisk2(depthBitmap, dirName, seriesCaptured, "depth_");
             //SaveImagesToDisk(depthData, depth.Info, depthPixelFormat, dirName, seriesCaptured, "depth_");

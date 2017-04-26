@@ -19,3 +19,4 @@ F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\x64\
 F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\x64\Debug\FER.pdb
 F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\x64\Debug\PopupMenu.g.cs
 F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\x64\Debug\PopupMenu.baml
+F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\x64\Debug\FER.csprojResolveAssemblyReference.cache
