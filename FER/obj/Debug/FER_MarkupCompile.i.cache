@@ -4,7 +4,7 @@
 winexe
 C#
 .cs
-F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\x64\Debug\
+F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\obj\Debug\
 FER
 none
 false
@@ -12,7 +12,7 @@ DEBUG;TRACE
 F:\Dropbox\augstskola\magistra studijas\magistra darbs\Projects\FER\FER\App.xaml
 2-294938899
 
-11-974693952
+11-468791083
 22-1758802423
 MainWindow.xaml;PopupMenu.xaml;
 

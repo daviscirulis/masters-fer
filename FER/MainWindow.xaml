@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:FER"
         mc:Ignorable="d"
-        Title="MainWindow" WindowStartupLocation="CenterScreen" Closed="WindowClosed" Left="0" Top="0" Width="1420">
+        Title="MainWindow" WindowStartupLocation="CenterScreen" Closed="WindowClosed" Left="0" Top="0" Width="1420" Height="580">
     <Grid x:Name="mainGrid">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="640"/>
@@ -13,8 +13,8 @@
             <ColumnDefinition Width="120"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
-            <RowDefinition Height="600*"/>
-            <RowDefinition Height="70*"/>
+            <RowDefinition Height="500"/>
+            <RowDefinition />
         </Grid.RowDefinitions>
         <StackPanel x:Name="colorPanel" Grid.Row="0" Grid.RowSpan="1" Grid.ColumnSpan="1" Grid.Column="0">
             <Canvas x:Name="imgColorCanvas" Panel.ZIndex="999"/>
