@@ -1,8 +1,8 @@
 # masters-fer
 ## Add references:
 
-
 x86 -> %RSSDK%\bin\win32
+
 x64 -> %RSSDK%\bin\x64
 
 
