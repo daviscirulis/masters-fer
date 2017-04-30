@@ -45,6 +45,13 @@
                 <ComboBoxItem Content="Yaw" HorizontalAlignment="Left"/>
                 <ComboBoxItem Content="Mouth" HorizontalAlignment="Left"/>
             </ComboBox>
+            <StackPanel>
+                <Label>BBox Width</Label>
+                <TextBox x:Name="bboxWidth" Text="224"/>
+                <Label>BBox Height</Label>
+                <TextBox x:Name="bboxHeight" Text="224"/>
+                <Button x:Name="saveBboxSize" Content="Save Size" Click="saveBboxSize_Click"/>
+            </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <Label>L-Offset:</Label>
                 <Label x:Name="landmarkOffsetLabel">0</Label>

@@ -56,6 +56,8 @@ namespace FER
         private bool detectionEnabled = true;
         private bool landmarksEnabled = true;
         private bool terminate = false;
+        private int boxWidth;
+        private int boxHeight;
         enum ImageType { COLOR, DEPTH };
         List<RectI32> boundingBoxes;
         List<LandmarkPoint[]> landmarks;
@@ -122,6 +124,8 @@ namespace FER
             this.colorPixelFormat = Intel.RealSense.PixelFormat.PIXEL_FORMAT_RGB32;
             this.depthPixelFormat = Intel.RealSense.PixelFormat.PIXEL_FORMAT_DEPTH_RAW;
             this.skippedFrames = 0;
+            this.boxWidth = 224;
+            this.boxHeight = 224;
         }
 
         private void InitCamera()
@@ -288,23 +292,19 @@ namespace FER
                 float[] depthPixels = ImageToFloatArray(depth);
                 PointF32[] invuvmap = GetInvUVMap(color, depth);
                 Point3DF32[] mappedPixels = GetMappedPixels(cwidth, cheight, dwidth, dheight, invuvmap, depthPixels);
+
                 Bitmap depthBitmap = depthBitmap = GetDepthF32Bitmap(depth.Info.width, depth.Info.height, mappedPixels);
                 Bitmap colorBitmap = colorBitmap = colorData.ToBitmap(0, cwidth, cheight);
 
-                //release access
-                color.ReleaseAccess(colorData);
-                depth.ReleaseAccess(depthData);
-                color.Dispose();
-                depth.Dispose();
 
                 //save image
                 if (captureImage)
                 {
-                    SaveSingleRgbdToDisk(colorBitmap, depthBitmap);
+                    SaveSingleRgbdToDisk(colorBitmap, depthBitmap, mappedPixels);
                 }
                 else if (captureSeries)
                 {
-                    SaveSeriesRgbdToDisk(dirName, colorBitmap, depthBitmap);
+                    SaveSeriesRgbdToDisk(dirName, colorBitmap, depthBitmap, mappedPixels);
                     skippedFrames = 0;
                 }
 
@@ -317,6 +317,11 @@ namespace FER
                 skippedFrames++;
             }
 
+            //release access
+            color.ReleaseAccess(colorData);
+            depth.ReleaseAccess(depthData);
+            color.Dispose();
+            depth.Dispose();
             projection.Dispose();
 
         }
@@ -449,36 +454,17 @@ namespace FER
         {
             landmarkBoundingBoxes.Clear();
             LandmarkPoint[] points;
-            float minX = float.MaxValue;
-            float maxX = 0;
-            float minY = float.MaxValue;
-            float maxY = 0;
             RectI32 boundingBox;
 
             for (int i = 0; i < landmarks.Count; i++)
             {
-                bool looped = false;
                 points = landmarks.ElementAt(i);
-                for (int j = 0 + landmarkOffset; j < points.Length - landmarkOffset; j++)
-                {
-                    if (!looped)
-                    {
-                        looped = true;
-                    }
-                    minX = Math.Min(minX, points[j].image.x);
-                    maxX = Math.Max(maxX, points[j].image.x);
-                    minY = Math.Min(minY, points[j].image.y);
-                    maxY = Math.Max(maxY, points[j].image.y);
-                }
-
-                //minY = padMinValue(minY, 50, 0);
-                //maxY = padMaxValue(maxY, padBoundinBoxY, HEIGHT);
-                if (looped)
-                {
-                    boundingBox = new RectI32((int)minX, (int)minY, (int)(maxX - minX), (int)(maxY - minY));
-                    landmarkBoundingBoxes.Add(boundingBox);
-                }
+                int centroidX = (int) points.Select(point => point.image.x).Sum() / points.Length;
+                int centroidY = (int)points.Select(point => point.image.y).Sum() / points.Length;
+                boundingBox = new RectI32(centroidX - (boxWidth / 2), centroidY - (boxHeight / 2), boxWidth, boxHeight);
+                landmarkBoundingBoxes.Add(boundingBox);
             }
+
         }
 
         private void UpdateBoundingBoxes(List<RectI32> bBoxes)
@@ -543,17 +529,18 @@ namespace FER
             return bitmapSource;
         }
 
-        private void WriteToFile(String path, Intel.RealSense.Image depth)
+        private void WriteToFile(String path, String imgName, Bitmap colorBitmap, Int32Rect boundingRect, Point3DF32[] points)
         {
+            if(String.IsNullOrEmpty(path))
+            {
+                path = "./";
+            }
+            File.WriteAllLines(path+ imgName + "_dp.txt", points.Where(point=>point.x>boundingRect.X && point.x<boundingRect.X+boundingRect.Height && point.y > boundingRect.Y && point.y < boundingRect.Y+boundingRect.Width).Select(d =>
+            {
+                System.Drawing.Color color = colorBitmap.GetPixel((int)d.x, (int)d.y);
+                return d.x.ToString() + " " + d.y.ToString() + " " + d.z.ToString() + " " + color.R + " " + color.G + " " + color.B;
 
-            Point3DF32[] vertices = new Point3DF32[depth.Info.width * depth.Info.height];
-            projection.QueryVertices(depth, vertices);
-
-
-            long timestamp = depth.TimeStamp;
-
-            File.WriteAllLines(path + "." + timestamp + ".txt", vertices.Select(d => d.x.ToString() + " " + d.y.ToString() + " " + d.z.ToString()).ToArray());
-
+            }).ToArray());
         }
 
         private void WindowClosed(object sender, EventArgs e)
@@ -582,7 +569,7 @@ namespace FER
             }
         }
 
-        private void SaveImagesToDisk(Bitmap bitmap, String directoryName, int imageId, String imgPrefix, ImageType type)
+        private void SaveImagesToDisk(Bitmap bitmap, String directoryName, int imageId, String imgPrefix, ImageType type, Point3DF32[] mappedPixels)
         {
             Int32 unixTimestamp;
             RectI32 bRect;
@@ -598,7 +585,12 @@ namespace FER
             {
                 unixTimestamp = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
                 bRect = landmarkBoundingBoxes.ElementAt(i);
-                cropped = new CroppedBitmap(source, new Int32Rect(bRect.x, bRect.y, bRect.w, bRect.h));
+                Int32Rect croppedRect = new Int32Rect(bRect.x, bRect.y, bRect.w, bRect.h);
+                cropped = new CroppedBitmap(source, croppedRect);
+                if (type.Equals(ImageType.COLOR))
+                {
+                    WriteToFile(dirName, imgPrefix + unixTimestamp + "_" + imageId,bitmap, croppedRect,mappedPixels);
+                }
 
                 using (stream = new FileStream(dirName + imgPrefix + unixTimestamp + "_" + imageId + ".jpeg", FileMode.Create))
                 {
@@ -836,10 +828,11 @@ namespace FER
             return bmp;
         }
 
-        private void SaveSingleRgbdToDisk(Bitmap colorBitmap, Bitmap depthBitmap)
+        private void SaveSingleRgbdToDisk(Bitmap colorBitmap, Bitmap depthBitmap, Point3DF32[] mappedPixels)
         {
             SaveImagesToDisk2(depthBitmap, "./", 1, "depth_");
-            SaveImagesToDisk(colorBitmap, "", 1, "color_", ImageType.COLOR);
+            SaveImagesToDisk(colorBitmap, "", 1, "color_", ImageType.COLOR, mappedPixels);
+
             //SaveImagesToDisk(depthData, depthInfo, "", 1, "depth_", ImageType.DEPTH);
             //SaveImagesToDisk(depthData, depth.Info, depthPixelFormat, "", 1, "depth_");
             captureImage = false;
@@ -853,11 +846,11 @@ namespace FER
             }));
         }
 
-        private void SaveSeriesRgbdToDisk(String dirName, Bitmap colorBitmap, Bitmap depthBitmap)
+        private void SaveSeriesRgbdToDisk(String dirName, Bitmap colorBitmap, Bitmap depthBitmap, Point3DF32[] mappedPixels)
         {
             ++seriesCaptured;
             UpdateMessageLabel("Remaining Frames: " + (seriesToCapture - seriesCaptured));
-            SaveImagesToDisk(colorBitmap, dirName, seriesCaptured, "color_", ImageType.COLOR);
+            SaveImagesToDisk(colorBitmap, dirName, seriesCaptured, "color_", ImageType.COLOR, mappedPixels);
             //SaveImagesToDisk(depthData, depthInfo, dirName, seriesCaptured, "depth_", ImageType.DEPTH);
             SaveImagesToDisk2(depthBitmap, dirName, seriesCaptured, "depth_");
             //SaveImagesToDisk(depthData, depth.Info, depthPixelFormat, dirName, seriesCaptured, "depth_");
@@ -1038,6 +1031,25 @@ namespace FER
                 lblMessage.Content = "(Wave Your Hand)";
             }));
 
+        }
+
+        private void saveBboxSize_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                int width = Int32.Parse(bboxWidth.Text);
+                int height = Int32.Parse(bboxHeight.Text);
+                if(width>0 && height > 0)
+                {
+                    boxWidth = width;
+                    boxHeight = height;
+                }
+                
+            } catch(Exception ex)
+            {
+                bboxWidth.Text = boxWidth.ToString();
+                bboxHeight.Text = boxHeight.ToString();
+            }
         }
     }
 
