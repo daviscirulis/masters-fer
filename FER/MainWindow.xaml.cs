@@ -60,6 +60,7 @@ namespace FER
         private int boxHeight;
         enum ImageType { COLOR, DEPTH };
         List<RectI32> boundingBoxes;
+        List<LandmarkPoint[]> allLandmarks;
         List<LandmarkPoint[]> landmarks;
         List<RectI32> landmarkBoundingBoxes;
         List<System.Windows.Media.Color> colors;
@@ -99,6 +100,7 @@ namespace FER
             this.msgTimer = 0;
             this.boundingBoxes = new List<RectI32>();
             this.landmarks = new List<LandmarkPoint[]>();
+            this.allLandmarks = new List<LandmarkPoint[]>();
             this.landmarkBoundingBoxes = new List<RectI32>();
             this.colors = new List<System.Windows.Media.Color>();
             this.depthFormats = new List<String>();
@@ -194,12 +196,12 @@ namespace FER
                 //process gesture
                 ProcessGesture();
 
-                //process image streams
-                ProcessImages();
-
                 //process face
                 ProcessLandmarks();
                 CreateLandmarkBoundingBoxes();
+
+                //process image streams
+                ProcessImages();
 
                 //Release the frame
                 senseManager.ReleaseFrame();
@@ -221,6 +223,7 @@ namespace FER
             Face face;
             RectI32 boundingRect;
             LandmarkPoint[] groupPoints;
+            LandmarkPoint[] allPoints;
             for (int i = 0; i < numOfFaces; i++)
             {
                 face = faceData.QueryFaceByIndex(i);
@@ -242,6 +245,12 @@ namespace FER
                     if (groupPoints != null)
                     {
                         landmarks.Add(groupPoints);
+                    }
+
+                    allPoints = face.Landmarks.Points;
+                    if (allPoints != null)
+                    {
+                        allLandmarks.Add(allPoints);
                     }
                 }
             }
@@ -293,7 +302,7 @@ namespace FER
                 PointF32[] invuvmap = GetInvUVMap(color, depth);
                 Point3DF32[] mappedPixels = GetMappedPixels(cwidth, cheight, dwidth, dheight, invuvmap, depthPixels);
 
-                Bitmap depthBitmap = depthBitmap = GetDepthF32Bitmap(depth.Info.width, depth.Info.height, mappedPixels);
+                Bitmap depthBitmap = depthBitmap = GetDepthF32Bitmap(depth.Info.width, depth.Info.height, mappedPixels, allLandmarks);
                 Bitmap colorBitmap = colorBitmap = colorData.ToBitmap(0, cwidth, cheight);
 
 
@@ -459,7 +468,7 @@ namespace FER
             for (int i = 0; i < landmarks.Count; i++)
             {
                 points = landmarks.ElementAt(i);
-                int centroidX = (int) points.Select(point => point.image.x).Sum() / points.Length;
+                int centroidX = (int)points.Select(point => point.image.x).Sum() / points.Length;
                 int centroidY = (int)points.Select(point => point.image.y).Sum() / points.Length;
                 boundingBox = new RectI32(centroidX - (boxWidth / 2), centroidY - (boxHeight / 2), boxWidth, boxHeight);
                 landmarkBoundingBoxes.Add(boundingBox);
@@ -531,16 +540,16 @@ namespace FER
 
         private void WriteToFile(String path, String imgName, Bitmap colorBitmap, Int32Rect boundingRect, Point3DF32[] points)
         {
-            if(String.IsNullOrEmpty(path))
+            if (String.IsNullOrEmpty(path))
             {
                 path = "./";
             }
-            File.WriteAllLines(path+ imgName + "_dp.txt", points.Where(point=>point.x>boundingRect.X && point.x<boundingRect.X+boundingRect.Height && point.y > boundingRect.Y && point.y < boundingRect.Y+boundingRect.Width).Select(d =>
-            {
-                System.Drawing.Color color = colorBitmap.GetPixel((int)d.x, (int)d.y);
-                return d.x.ToString() + " " + d.y.ToString() + " " + d.z.ToString() + " " + color.R + " " + color.G + " " + color.B;
+            File.WriteAllLines(path + imgName + "_dp.txt", points.Where(point => point.x > boundingRect.X && point.x < boundingRect.X + boundingRect.Height && point.y > boundingRect.Y && point.y < boundingRect.Y + boundingRect.Width).Select(d =>
+                       {
+                           System.Drawing.Color color = colorBitmap.GetPixel((int)d.x, (int)d.y);
+                           return d.x.ToString() + " " + d.y.ToString() + " " + d.z.ToString() + " " + color.R + " " + color.G + " " + color.B;
 
-            }).ToArray());
+                       }).ToArray());
         }
 
         private void WindowClosed(object sender, EventArgs e)
@@ -589,7 +598,7 @@ namespace FER
                 cropped = new CroppedBitmap(source, croppedRect);
                 if (type.Equals(ImageType.COLOR))
                 {
-                    WriteToFile(dirName, imgPrefix + unixTimestamp + "_" + imageId,bitmap, croppedRect,mappedPixels);
+                    WriteToFile(dirName, imgPrefix + unixTimestamp + "_" + imageId, bitmap, croppedRect, mappedPixels);
                 }
 
                 using (stream = new FileStream(dirName + imgPrefix + unixTimestamp + "_" + imageId + ".jpeg", FileMode.Create))
@@ -793,12 +802,39 @@ namespace FER
             return mappedPixels;
         }
 
-        private Bitmap GetDepthF32Bitmap(int dwidth, int dheight, Point3DF32[] mappedPixels)
+        private Point3DF32[] MapLandmarksToDepth(Point3DF32[] mappedPixels, LandmarkPoint[] landmarkPoints)
         {
 
+            return mappedPixels.Join(
+                    landmarkPoints,
+                    outerKey => new { X = (int)outerKey.x, Y = (int)outerKey.y },
+                    innerKey => new { X = (int)innerKey.image.x, Y = (int)innerKey.image.y },
+                    (outer, inner) => outer
+                ).Select(mp => mp).ToArray();
+        }
+
+        private Bitmap GetDepthF32Bitmap(int dwidth, int dheight, Point3DF32[] mappedPixels, List<LandmarkPoint[]> landmarkPoints)
+        {
+            float maxValue, minValue;
+
+            if (landmarkPoints.Count() > 0)
+            {
+                LandmarkPoint[] landmarkArray = landmarkPoints.ElementAt(0);
+                Point3DF32[] mappedLandmarks = MapLandmarksToDepth(mappedPixels, landmarkPoints.ElementAt(0));
+                maxValue = mappedLandmarks.Select(point => point.z).Max();
+                minValue = mappedLandmarks.Select(point => point.z).Where(z => z > 0).Min();
+
+            }
+            else
+            {
+                maxValue = mappedPixels.Select(point => point.z).Max();
+                minValue = mappedPixels.Select(point => point.z).Where(z => z > 0).Min();
+            }
+
+            System.Diagnostics.Debug.WriteLine("MinValue: " + minValue);
+            System.Diagnostics.Debug.WriteLine("MaxValue: " + maxValue);
+
             Bitmap bmp = new Bitmap(dwidth, dheight, System.Drawing.Imaging.PixelFormat.Format48bppRgb);
-            float maxValue = mappedPixels.Select(point => point.z).Max();
-            float minValue = mappedPixels.Select(point => point.z).Where(z => z > 0).Min();
             float a = 1.0f;
             float b = 0.1f;
             for (int i = 0; i < mappedPixels.GetLength(0); i++)
@@ -806,6 +842,14 @@ namespace FER
                 if (mappedPixels[i].z > 0f)
                 {
                     float lum = ((b - a) * ((mappedPixels[i].z - minValue) / (maxValue - minValue)) + a) * 255.0f;
+                    if (lum > 255.0f)
+                    {
+                        lum = 255.0f;
+                    }
+                    else if (lum < 0.0f)
+                    {
+                        lum = 0.0f;
+                    }
                     System.Drawing.Color newColor = System.Drawing.Color.FromArgb((int)lum, (int)lum, (int)lum);
                     bmp.SetPixel((int)mappedPixels[i].x, (int)mappedPixels[i].y, newColor);
                 }
@@ -1039,13 +1083,14 @@ namespace FER
             {
                 int width = Int32.Parse(bboxWidth.Text);
                 int height = Int32.Parse(bboxHeight.Text);
-                if(width>0 && height > 0)
+                if (width > 0 && height > 0)
                 {
                     boxWidth = width;
                     boxHeight = height;
                 }
-                
-            } catch(Exception ex)
+
+            }
+            catch (Exception ex)
             {
                 bboxWidth.Text = boxWidth.ToString();
                 bboxHeight.Text = boxHeight.ToString();
