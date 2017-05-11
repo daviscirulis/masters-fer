@@ -544,7 +544,7 @@ namespace FER
             {
                 path = "./";
             }
-            File.WriteAllLines(path + imgName + "_dp.txt", points.Where(point => point.x > boundingRect.X && point.x < boundingRect.X + boundingRect.Height && point.y > boundingRect.Y && point.y < boundingRect.Y + boundingRect.Width).Select(d =>
+            File.WriteAllLines(path + imgName + "_dp.txt", points.Where(point => point.x > boundingRect.X && point.x < boundingRect.X + boundingRect.Width && point.y > boundingRect.Y && point.y < boundingRect.Y + boundingRect.Height).Select(d =>
                        {
                            System.Drawing.Color color = colorBitmap.GetPixel((int)d.x, (int)d.y);
                            return d.x.ToString() + " " + d.y.ToString() + " " + d.z.ToString() + " " + color.R + " " + color.G + " " + color.B;
