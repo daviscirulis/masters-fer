@@ -1,30 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Threading;
 using System.Drawing;
 using Intel.RealSense.Face;
-using Intel.RealSense.Utility;
-using Intel.RealSense.Hand;
-using Intel.RealSense.HandCursor;
-using Intel.RealSense.Segmentation;
 using Intel.RealSense;
-using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
 using System.IO;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Windows.Controls.Primitives;
 
 namespace FER
 {
@@ -37,14 +23,7 @@ namespace FER
         private Projection projection;
         private Thread processingThread;
         private SenseManager senseManager;
-        private HandCursorModule cursor;
-        private CursorConfiguration cursorConfig;
-        private CursorData cursorData;
-        private Intel.RealSense.HandCursor.GestureData gestureData;
         private SampleReader reader;
-        private bool handWaving;
-        private bool handTrigger;
-        private int msgTimer;
         private int WIDTH = 640;
         private int HEIGHT = 480;
         private int FRAME_RATE = 60;
@@ -69,17 +48,15 @@ namespace FER
         PopupMenu popupMenu = null;
         LandmarksGroupType landmarkGroup;
         bool extractLandmarkGroup;
-        int landmarkOffset;
         bool drawFaceBoundingBox;
         bool drawLandmarkPoints;
         bool drawLandmarkBoundingBox;
-        int saveSeriesDelay;
         bool captureImage;
+        bool pauseSave;
         int seriesToCapture;
         int seriesCaptured;
         bool captureSeries;
         String dirName;
-        int skippedFrames;
 
         public MainWindow()
         {
@@ -95,9 +72,6 @@ namespace FER
 
         private void InitVariables()
         {
-            this.handWaving = false;
-            this.handTrigger = false;
-            this.msgTimer = 0;
             this.boundingBoxes = new List<RectI32>();
             this.landmarks = new List<LandmarkPoint[]>();
             this.allLandmarks = new List<LandmarkPoint[]>();
@@ -110,24 +84,22 @@ namespace FER
             this.colorFormats = new List<String>();
             this.colorFormats.Add("RGB32");
             this.colorFormats.Add("RGB24");
-            this.landmarkGroup = LandmarksGroupType.LANDMARK_GROUP_JAW;
-            this.extractLandmarkGroup = false;
-            this.landmarkOffset = 0;
+            this.landmarkGroup = LandmarksGroupType.LANDMARK_GROUP_MOUTH;
+            this.extractLandmarkGroup = true;
             this.drawFaceBoundingBox = false;
             this.drawLandmarkPoints = false;
-            this.drawLandmarkBoundingBox = false;
-            this.saveSeriesDelay = 0;
+            this.drawLandmarkBoundingBox = true;
             this.captureImage = false;
             this.captureSeries = false;
+            this.pauseSave = false;
             this.seriesCaptured = 0;
             this.seriesToCapture = 0;
             this.streamBox.SelectedIndex = 0;
             this.dirName = "";
             this.colorPixelFormat = Intel.RealSense.PixelFormat.PIXEL_FORMAT_RGB32;
             this.depthPixelFormat = Intel.RealSense.PixelFormat.PIXEL_FORMAT_DEPTH_RAW;
-            this.skippedFrames = 0;
-            this.boxWidth = 224;
-            this.boxHeight = 224;
+            this.boxWidth = 140;
+            this.boxHeight = 80;
         }
 
         private void InitCamera()
@@ -143,15 +115,6 @@ namespace FER
 
             reader.EnableStream(StreamType.STREAM_TYPE_COLOR, WIDTH, HEIGHT, FRAME_RATE, StreamOption.STREAM_OPTION_STRONG_STREAM_SYNC);
             reader.EnableStream(StreamType.STREAM_TYPE_DEPTH, WIDTH, HEIGHT, FRAME_RATE, StreamOption.STREAM_OPTION_STRONG_STREAM_SYNC);
-
-
-            // Configure the Hand Module
-            cursor = HandCursorModule.Activate(senseManager);
-            cursorConfig = cursor.CreateActiveConfiguration();
-            cursorConfig.EngagementEnabled = true;
-            cursorConfig.EnableGesture(GestureType.CURSOR_HAND_OPENING);
-            cursorConfig.EnableAllAlerts();
-            cursorConfig.ApplyChanges();
 
             //Configure the Face Module
             faceModule = FaceModule.Activate(senseManager);
@@ -193,9 +156,6 @@ namespace FER
                     break;
                 }
 
-                //process gesture
-                ProcessGesture();
-
                 //process face
                 ProcessLandmarks();
                 CreateLandmarkBoundingBoxes();
@@ -233,12 +193,10 @@ namespace FER
                 {
                     if (extractLandmarkGroup)
                     {
-                        //System.Diagnostics.Debug.WriteLine("Extracting Group: " + landmarkGroup);
                         face.Landmarks.QueryPointsByGroup(landmarkGroup, out groupPoints);
                     }
                     else
                     {
-                        //System.Diagnostics.Debug.WriteLine("Extracting Group: ALL");
                         groupPoints = face.Landmarks.Points;
                     }
 
@@ -260,22 +218,6 @@ namespace FER
 
         }
 
-        private void ProcessGesture()
-        {
-            if (cursor != null)
-            {
-                // Retrieve the most recent processed data
-                cursorData = cursor.CreateOutput();
-                cursorData.Update();
-                handWaving = cursorData.IsGestureFired(GestureType.CURSOR_HAND_OPENING, out gestureData);
-            }
-
-            //release curor data
-            if (cursorData != null) cursorData.Dispose();
-            cursor.Dispose();
-            cursorConfig.Dispose();
-        }
-
         private void ProcessImages()
         {
             Sample sample = reader.Sample;
@@ -292,7 +234,7 @@ namespace FER
             UpdateUI(colorData, color.Info, ImageType.COLOR);
             UpdateUI(depthData, depth.Info, ImageType.DEPTH);
 
-            if (captureImage || (captureSeries && skippedFrames >= saveSeriesDelay))
+            if ((captureImage || captureSeries) && !pauseSave)
             {
                 int cwidth = color.Info.width;
                 int cheight = color.Info.height;
@@ -314,16 +256,10 @@ namespace FER
                 else if (captureSeries)
                 {
                     SaveSeriesRgbdToDisk(dirName, colorBitmap, depthBitmap, mappedPixels);
-                    skippedFrames = 0;
                 }
 
                 depthBitmap.Dispose();
                 colorBitmap.Dispose();
-            }
-
-            if (captureSeries && skippedFrames < saveSeriesDelay)
-            {
-                skippedFrames++;
             }
 
             //release access
@@ -364,27 +300,7 @@ namespace FER
                     bitmap.Dispose();
                     imageBox.Source = source;
                     source = null;
-                    //imageBox.Source = GetBitmap(imageData, imageInfo, DPI_X, DPI_Y);
 
-                    // Update the screen message
-                    if (handWaving)
-                    {
-                        lblMessage.Content = "Hello World!";
-                        handTrigger = true;
-                    }
-
-                    // Reset the screen message
-                    if (handTrigger)
-                    {
-                        msgTimer++;
-
-                        if (msgTimer >= 200)
-                        {
-                            lblMessage.Content = "(Wave Your Hand)";
-                            msgTimer = 0;
-                            handTrigger = false;
-                        }
-                    }
                 }
             }));
         }
@@ -440,7 +356,6 @@ namespace FER
             double scaleX = imgColorStream.ActualWidth / WIDTH;
             double scaleY = imgColorStream.ActualHeight / HEIGHT;
 
-            //System.Diagnostics.Debug.WriteLine("landmark list count: " + landmarks.Count);
             for (int i = 0; i < landmarks.Count; i++)
             {
                 LandmarkPoint[] points = landmarks.ElementAt(i);
@@ -482,12 +397,9 @@ namespace FER
             double scaleX = imgColorStream.ActualWidth / WIDTH;
             double scaleY = imgColorStream.ActualHeight / HEIGHT;
 
-            //System.Diagnostics.Debug.WriteLine("bounding box list count: " + bBoxes.Count);
             System.Windows.Shapes.Rectangle rect;
             for (int i = 0; i < bBoxes.Count; i++)
             {
-                //System.Diagnostics.Debug.WriteLine("scale x: " + scaleX + ", scaleY: " + scaleY);
-                //System.Diagnostics.Debug.WriteLine("bounding box: x -> " + bBoxes[i].x + " y -> " + bBoxes[i].y + " h -> " + bBoxes[i].h + " w -> " + bBoxes[i].w);
                 rect = new System.Windows.Shapes.Rectangle();
                 rect.Width = bBoxes[i].w * scaleX;
                 rect.Height = bBoxes[i].h * scaleY;
@@ -555,12 +467,10 @@ namespace FER
         private void WindowClosed(object sender, EventArgs e)
         {
             terminate = true;
-            //processingThread.Abort();
         }
 
         private void SaveImage(object sender, RoutedEventArgs e)
         {
-            //WriteToFile("./imageDataArray");
             captureImage = true;
         }
 
@@ -578,7 +488,7 @@ namespace FER
             }
         }
 
-        private void SaveImagesToDisk(Bitmap bitmap, String directoryName, int imageId, String imgPrefix, ImageType type, Point3DF32[] mappedPixels)
+        private void SaveColorImagesAndDatapointsToDisk(Bitmap bitmap, String directoryName, int imageId, String imgPrefix, ImageType type, Point3DF32[] mappedPixels)
         {
             Int32 unixTimestamp;
             RectI32 bRect;
@@ -622,7 +532,7 @@ namespace FER
             GC.Collect();
         }
 
-        private void SaveImagesToDisk2(Bitmap bitmap, String directoryName, int imageId, String imgPrefix)
+        private void SaveDepthImagesToDisk(Bitmap bitmap, String directoryName, int imageId, String imgPrefix)
         {
             Int32 unixTimestamp;
             RectI32 bRect;
@@ -656,8 +566,6 @@ namespace FER
             bitmap.Dispose();
 
             GC.Collect();
-
-            //image.ReleaseAccess(imageData);
         }
 
         private String CheckDirectoryName(String directoryName)
@@ -678,7 +586,6 @@ namespace FER
         private void StreamBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             String streamType = (streamBox.SelectedItem as ComboBoxItem).Content.ToString();
-            //System.Diagnostics.Debug.WriteLine("streamType: " + streamType);
             switch (streamType.ToLower())
             {
                 case "color":
@@ -694,22 +601,19 @@ namespace FER
 
         private void SaveSeries(object sender, RoutedEventArgs e)
         {
-            popupMenu = new PopupMenu();
-            bool? dialogResult = popupMenu.ShowDialog();
-
-            if (dialogResult.HasValue && dialogResult.Value)
+            if (!captureSeries)
             {
-                seriesToCapture = (int)popupMenu.timerSlider.Value;
-                dirName = popupMenu.GetDirectoryPath();
-                captureSeries = true;
+                popupMenu = new PopupMenu();
+                bool? dialogResult = popupMenu.ShowDialog();
+
+                if (dialogResult.HasValue && dialogResult.Value)
+                {
+                    seriesToCapture = (int)popupMenu.timerSlider.Value;
+                    dirName = popupMenu.GetDirectoryPath();
+                    captureSeries = true;
+                }
             }
 
-        }
-
-        private void LandmarkOffsetSliderValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            landmarkOffset = (int)landmarkOffsetSlider.Value;
-            landmarkOffsetLabel.Content = landmarkOffset.ToString();
         }
 
         private void LandmarkGroupBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -759,12 +663,6 @@ namespace FER
         private void DrawLandmarkBoundingBoxesUnchecked(object sender, RoutedEventArgs e)
         {
             drawLandmarkBoundingBox = false;
-        }
-
-        private void SaveSeriesDelaySliderValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            saveSeriesDelay = (int)saveSeriesDelaySlider.Value;
-            saveSeriesDelayLabel.Content = saveSeriesDelay.ToString();
         }
 
         private float[] ImageToFloatArray(Intel.RealSense.Image depth)
@@ -831,9 +729,6 @@ namespace FER
                 minValue = mappedPixels.Select(point => point.z).Where(z => z > 0).Min();
             }
 
-            System.Diagnostics.Debug.WriteLine("MinValue: " + minValue);
-            System.Diagnostics.Debug.WriteLine("MaxValue: " + maxValue);
-
             Bitmap bmp = new Bitmap(dwidth, dheight, System.Drawing.Imaging.PixelFormat.Format48bppRgb);
             float a = 1.0f;
             float b = 0.1f;
@@ -854,31 +749,13 @@ namespace FER
                     bmp.SetPixel((int)mappedPixels[i].x, (int)mappedPixels[i].y, newColor);
                 }
             }
-
-            //System.Drawing.Image img = (System.Drawing.Image)bmp;
-
-            //Int32 unixTimestamp;
-
-            //image.AcquireAccess(ImageAccess.ACCESS_READ, pixelFormat, out ImageData imageData);
-
-            //  unixTimestamp = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-
-            //img.Save("./" + unixTimestamp + "_1" + ".jpeg", System.Drawing.Imaging.ImageFormat.Jpeg);
-
-            //long timestamp = depth.TimeStamp;
-
-            //File.WriteAllLines("./" + "." + timestamp + ".txt", mappedPixels.Select(d => d.ToString()).ToArray());
-
             return bmp;
         }
 
         private void SaveSingleRgbdToDisk(Bitmap colorBitmap, Bitmap depthBitmap, Point3DF32[] mappedPixels)
         {
-            SaveImagesToDisk2(depthBitmap, "./", 1, "depth_");
-            SaveImagesToDisk(colorBitmap, "", 1, "color_", ImageType.COLOR, mappedPixels);
-
-            //SaveImagesToDisk(depthData, depthInfo, "", 1, "depth_", ImageType.DEPTH);
-            //SaveImagesToDisk(depthData, depth.Info, depthPixelFormat, "", 1, "depth_");
+            SaveDepthImagesToDisk(depthBitmap, "./", 1, "depth_");
+            SaveColorImagesAndDatapointsToDisk(colorBitmap, "", 1, "color_", ImageType.COLOR, mappedPixels);
             captureImage = false;
         }
 
@@ -894,10 +771,8 @@ namespace FER
         {
             ++seriesCaptured;
             UpdateMessageLabel("Remaining Frames: " + (seriesToCapture - seriesCaptured));
-            SaveImagesToDisk(colorBitmap, dirName, seriesCaptured, "color_", ImageType.COLOR, mappedPixels);
-            //SaveImagesToDisk(depthData, depthInfo, dirName, seriesCaptured, "depth_", ImageType.DEPTH);
-            SaveImagesToDisk2(depthBitmap, dirName, seriesCaptured, "depth_");
-            //SaveImagesToDisk(depthData, depth.Info, depthPixelFormat, dirName, seriesCaptured, "depth_");
+            SaveColorImagesAndDatapointsToDisk(colorBitmap, dirName, seriesCaptured, "color_", ImageType.COLOR, mappedPixels);
+            SaveDepthImagesToDisk(depthBitmap, dirName, seriesCaptured, "depth_");
             if (seriesCaptured >= seriesToCapture)
             {
                 UpdateMessageLabel("");
@@ -1067,12 +942,13 @@ namespace FER
 
             captureImage = false;
             captureSeries = false;
+            pauseSave = false;
             seriesCaptured = 0;
             seriesToCapture = 0;
 
             this.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate ()
             {
-                lblMessage.Content = "(Wave Your Hand)";
+                lblMessage.Content = "";
             }));
 
         }
@@ -1094,6 +970,17 @@ namespace FER
             {
                 bboxWidth.Text = boxWidth.ToString();
                 bboxHeight.Text = boxHeight.ToString();
+            }
+        }
+
+        private void pauseResumeSave(object sender, RoutedEventArgs e)
+        {
+            if (captureSeries)
+            {
+                pauseSave = !pauseSave;
+            } else
+            {
+                pauseSave = false;
             }
         }
     }
